@@ -1,11 +1,158 @@
+"""
+Collections:
+
+Domains
+{
+    _id,
+    dbver,
+    domain,
+    added,
+    last_lookup,
+    tags,
+    description
+}
+
+status_mutations
+{
+    _id,
+    dbver,
+    domain_id: ref Domains,
+    lookup,
+    prev_lookup,
+    dns_state,
+    whois_state,
+}
+
+"""
+import datetime
+import logging
+
+from pymongo import MongoClient
+
 __author__ = 'ivo'
+_db_version = "0.1"
 
-class StorageInterface():
-    def __init__(self):
-        pass
+DOMAINCOL = "domains"
+STATUSCOL = "status_mutations"
 
-    def targets(self):
-        pass
+config = {"host": "localhost",
+          "port": "27017",
+          "db": "dnsmon"}
 
-    def storeResult(self):
-        pass
+_log = None
+
+
+class DomainExistsException(BaseException):
+    pass
+
+
+def configure(**kwargs):
+    global _log
+    config.update(kwargs)
+    config["client"] = MongoClient(config["host"], int(config["port"]))
+    _log = logging.getLogger(__name__)
+
+    db = config["client"][config["db"]]
+    _log.info("Mongodb connection configured. ")
+    _log.info("Database: %r", db)
+    _log.info("Collections:\n")
+    for colname in db.collection_names(include_system_collections=False):
+        _log.info(" %s: %d records", colname, db[colname].count())
+        _log.info(" %r\n", db[colname].index_information())
+
+
+def init_database():
+    """
+    Create indices on collections. Should be called only once in the lifetime of the database
+    :return:
+    """
+    db = config["client"][config["db"]]
+    domaincol = db[DOMAINCOL]
+    domaincol.ensure_index("domain")
+    domaincol.ensure_index("last_lookup")
+    domaincol.ensure_index("tags")
+    statuscol = db[STATUSCOL]
+    statuscol.ensure_index("lookup")
+    statuscol.ensure_index("dns_state")
+    statuscol.ensure_index("whois_state")
+    _log.debug("Database %r initialized.", db)
+    return True
+
+
+def domains(min_age=None, num=None):
+    """
+    Get domains from mongodb. If min_age is provided, the domains for which a status check has not
+     been performed at least min_age time ago.
+    :param min_age: the minimal age of the last lookup
+    :param num: the max number of domains to retrieve
+    :return:list of domains
+    """
+    domaincol = config["client"][config["db"]][DOMAINCOL]
+    rlimit = 0 if num is None else num
+    if min_age is not None:
+        last_lookup = datetime.datetime.now() - min_age
+        curs = domaincol.find({"$or": [{"last_lookup": {"$lt": last_lookup}}, {"last_lookup": None}]}, limit=rlimit).sort("last_lookup")
+    else:
+        curs = domaincol.find(limit=rlimit).sort("last_lookup")
+    return curs
+
+
+def add_domain(domain, check_duplicate=True):
+    """
+    Add domain to the mongo database
+    :param domain: domain to add
+    :param check_duplicate: if a domain record with the same name is allready present, fail.
+    :return:
+    """
+    _check_format(domain)
+    domaincol = config["client"][config["db"]][DOMAINCOL]
+    if check_duplicate and domaincol.find_one({"domain": domain["domain"]}):
+        raise DomainExistsException("domain %s allready exists".format(domain["domain"]))
+    domain["dbver"] = _db_version
+    domain["added"] = datetime.datetime.now()
+    domain["last_lookup"] = None
+    domid = domaincol.insert(domain)
+    _log.debug("Added domain %r with id %s", domain, str(domid))
+    return domid
+
+
+def del_domain(domain):
+    """
+    Delete a domain from the mongodb.
+    :param domain: dict of the domain
+    :return:
+    """
+    _check_format(domain)
+    domaincol = config["client"][config["db"]][DOMAINCOL]
+    res = domaincol.remove(domain)
+    _log.info("Domain %r removed from db: %r.", domain, res)
+    return res
+
+
+def add_status(status, domain):
+    """
+    :param status: The status to add
+    :param domain: The domain to update
+    :return:the id of the status document
+    """
+    _check_format(status)
+    _check_format(domain)
+    domaincol = config["client"][config["db"]][DOMAINCOL]
+    domaincol.update(domain, upsert=False)
+    statuscol = config["client"][config["db"]][STATUSCOL]
+    status["dbver"] = _db_version
+    status["domain"] = domain["_id"]
+    status["last_lookup"] = None
+    statusid = domaincol.insert(status)
+    _log.debug("Added status %r with id %s", status, str(statusid))
+    return statusid
+
+def domain_statuses(domain):
+    _check_format(domain)
+    statuscol = config["client"][config["db"]][STATUSCOL]
+    curs = statuscol.find({"domain_id": domain["_id"]})
+    return curs
+
+def _check_format(the_arg):
+    if not isinstance(the_arg, dict):
+        raise ValueError("{} is not a dict".format(repr(the_arg)))
