@@ -1,8 +1,11 @@
 dns-monitor
 ===========
-
 Monitor domains for status changes. 
 
+Required
+========
+- Tested in python 3.4. Will probably work on python 3.x. Surely not on python 2.x, deal with it. 
+- mongodb + pymongo
 
 IDEA
 ====

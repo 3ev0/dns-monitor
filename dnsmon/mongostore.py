@@ -5,7 +5,7 @@ Domains
 {
     _id,
     dbver,
-    domain,
+    name,
     added,
     last_lookup,
     tags,
@@ -27,6 +27,7 @@ status_mutations
 import datetime
 import logging
 
+import pymongo
 from pymongo import MongoClient
 
 __author__ = 'ivo'
@@ -97,7 +98,7 @@ def domains(min_age=None, num=None):
     return curs
 
 
-def add_domain(domain, check_duplicate=True):
+def save_domain(domain, fail_on_duplicate=True):
     """
     Add domain to the mongo database
     :param domain: domain to add
@@ -106,14 +107,19 @@ def add_domain(domain, check_duplicate=True):
     """
     _check_format(domain)
     domaincol = config["client"][config["db"]][DOMAINCOL]
-    if check_duplicate and domaincol.find_one({"domain": domain["domain"]}):
-        raise DomainExistsException("domain %s allready exists".format(domain["domain"]))
-    domain["dbver"] = _db_version
-    domain["added"] = datetime.datetime.now()
-    domain["last_lookup"] = None
-    domid = domaincol.insert(domain)
-    _log.debug("Added domain %r with id %s", domain, str(domid))
+    if "_id" not in domain: # performing insert
+        if fail_on_duplicate and domaincol.find_one({"name": domain["name"]}):
+            raise DomainExistsException("domain {} allready exists in mongodb".format(domain["name"]))
+        domain["dbver"] = _db_version
+        domain["added"] = datetime.datetime.now()
+        domain["last_lookup"] = None
+        domid = domaincol.save(domain)
+        _log.debug("Added domain %r with id %s", domain, str(domid))
+    else:
+        domid = domaincol.save(domain)
+        _log.debug("Updated domain %r", domain)
     return domid
+
 
 
 def del_domain(domain):
@@ -137,20 +143,17 @@ def add_status(status, domain):
     """
     _check_format(status)
     _check_format(domain)
-    domaincol = config["client"][config["db"]][DOMAINCOL]
-    domaincol.update(domain, upsert=False)
     statuscol = config["client"][config["db"]][STATUSCOL]
     status["dbver"] = _db_version
-    status["domain"] = domain["_id"]
-    status["last_lookup"] = None
-    statusid = domaincol.insert(status)
+    status["domain_id"] = domain["_id"]
+    statusid = statuscol.insert(status)
     _log.debug("Added status %r with id %s", status, str(statusid))
     return statusid
 
 def domain_statuses(domain):
     _check_format(domain)
     statuscol = config["client"][config["db"]][STATUSCOL]
-    curs = statuscol.find({"domain_id": domain["_id"]})
+    curs = statuscol.find({"domain_id": domain["_id"]}, sort=[("lookup", pymongo.DESCENDING)])
     return curs
 
 def _check_format(the_arg):

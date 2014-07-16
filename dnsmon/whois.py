@@ -14,18 +14,22 @@ import re
 import logging
 import socket
 import threading
+import datetime
+import time
+
+from . import libnet
 
 _log = logging.getLogger(__name__)
 _lock = threading.Lock()
-
 _auth_wserver_cache = {}
-
-_domain_re = re.compile("([a-z0-9\-](\.[a-z0-9\-]+)*)*\.[a-z][a-z0-9]*", re.I)
-_ip_re = re.compile("[0-9]{1,3}(\.[0-9]{1,3}){3}")
-_ip6_re = re.compile("^\s*((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,4}){1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:)))(%.+)?\s*$")
-_asnum_re = re.compile("(as|AS)[0-9]{1,6}")
 _whois_root = "whois.iana.org"
+_last_queried = {}
+_last_queried_lock = threading.RLock()
+_config = {"min_query_interval": 0.5}
 
+def configure(**kwargs):
+    _config.update(kwargs)
+    _log.info("Module configured: %s", _config)
 
 def repr_records(whoisdata):
     lines = []
@@ -39,7 +43,7 @@ def repr_records(whoisdata):
 
 
 def domain_lookup(domain, wserver=None):
-    if not _is_domain(domain):
+    if not libnet.is_domain(domain):
         raise ValueError("%s is not a valid domain", domain)
 
     if len(domain.strip(".").split(".")) is 1:
@@ -53,11 +57,11 @@ def domain_lookup(domain, wserver=None):
 
 
 def lookup(querystr, wserver=None):
-    if _is_domain(querystr):
+    if libnet.is_domain(querystr):
         return domain_lookup(querystr, wserver)
-    elif _is_ipaddr(querystr):
+    elif libnet.is_ipaddr(querystr):
         return ip_lookup(querystr, wserver)
-    elif _is_asnum(querystr):
+    elif libnet.is_asnum(querystr):
         return ip_lookup(querystr, wserver)
     else:
         raise ValueError(querystr, "Should be domain, ip or asnum")
@@ -65,7 +69,7 @@ def lookup(querystr, wserver=None):
 
 
 def ip_lookup(querystr, wserver=None):
-    if not _is_ipaddr(querystr) and not _is_asnum(querystr):
+    if not libnet.is_ipaddr(querystr) and not libnet.is_asnum(querystr):
         raise ValueError("%s is not a valid IP-address or ASnum", querystr)
 
     if not wserver:
@@ -131,6 +135,7 @@ def _parse_whois_response(response):
 
 
 def _talk_whois(wserver, querystr):
+    _delay(wserver)
     sock = socket.create_connection((wserver, 43))
     _log.debug("Connected to %s", wserver)
     queryblob = bytes(querystr + "\r\n", encoding="utf8", errors="replace")
@@ -229,15 +234,23 @@ def _get_auth_wserver(querystr):
     _log.debug("Found authorative whois server: %s", auth_wserver)
     return auth_wserver
 
+def _delay(wserver):
+    """
+    This forces threads to delay a preconfigured interval before querying the specified whois server again.
+    The thread that holds the wserver lock does not release until at least interval seconds have passed since last release.
+    :param wserver: The wserver for which the thread should delay
+    :return:
+    """
+    with _last_queried_lock:
+        if wserver not in _last_queried:
+            _last_queried[wserver] = [threading.RLock(), 0]
 
-def _is_domain(argstr):
-    return _domain_re.match(argstr) is not None
+    with _last_queried[wserver][0]:
+        interval = datetime.datetime.now().timestamp() - _last_queried[wserver][1]
+        sleep_time = _config["min_query_interval"] - interval
+        if sleep_time > 0:
+            _log.debug("%s Delaying to query %s: %f seconds...", threading.current_thread().name, wserver, sleep_time)
+            time.sleep(sleep_time)
+        _last_queried[wserver][1] = datetime.datetime.now().timestamp()
 
-
-def _is_ipaddr(argstr):
-    return _ip_re.match(argstr) is not None or _ip6_re.match(argstr) is not None
-
-
-def _is_asnum(argstr):
-    return _asnum_re.match(argstr) is not None
 
