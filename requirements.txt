@@ -1,3 +1,6 @@
 pymongo
 dnspython3
 requests
+flask
+flask-bootstrap
+flask-wtf

@@ -1,0 +1,25 @@
+{% extends "bootstrap/base.html" %}
+{% block title %}Dnsmon - {{ domain["name"] }}{% endblock %}
+
+{% block navbar %}
+<div class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+    <div class="container">
+        <div class="navbar-collapse collapse">
+          <ul class="nav navbar-nav">
+            <li><a href="/dashboard">Dashboard</a></li>
+          </ul>
+        </div><!--/.nav-collapse -->
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+    <div class="jumbotron">
+        <h1>{{ domain["name"] }}</h1>
+        <p>Added: {{ domain["added"] }} </p>
+        <p>Last lookup: {{ domain["last_lookup"] }}</p>
+    </div>
+    {% for stat in statuses %}
+
+    {% endfor %}
+{% endblock %}

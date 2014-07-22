@@ -80,7 +80,7 @@ def init_database():
     return True
 
 
-def domains(min_age=None, num=None):
+def domains(domainspec=None, min_age=None, num=None):
     """
     Get domains from mongodb. If min_age is provided, the domains for which a status check has not
      been performed at least min_age time ago.
@@ -90,7 +90,9 @@ def domains(min_age=None, num=None):
     """
     domaincol = config["client"][config["db"]][DOMAINCOL]
     rlimit = 0 if num is None else num
-    if min_age is not None:
+    if domainspec is not None:
+        curs = domaincol.find(domainspec)
+    elif min_age is not None:
         last_lookup = datetime.datetime.now() - min_age
         curs = domaincol.find({"$or": [{"last_lookup": {"$lt": last_lookup}}, {"last_lookup": None}]}, limit=rlimit).sort("last_lookup")
     else:
@@ -154,6 +156,15 @@ def domain_statuses(domain):
     _check_format(domain)
     statuscol = config["client"][config["db"]][STATUSCOL]
     curs = statuscol.find({"domain_id": domain["_id"]}, sort=[("lookup", pymongo.DESCENDING)])
+    return curs
+
+def statuses(max_age=None):
+    statuscol = config["client"][config["db"]][STATUSCOL]
+    if max_age is not None:
+        since = datetime.datetime.now() - max_age
+        curs = statuscol.find({"lookup": {"$gt": since}}, sort=[("lookup", pymongo.DESCENDING)])
+    else:
+        curs = statuscol.find(sort=[("lookup", pymongo.DESCENDING)])
     return curs
 
 def _check_format(the_arg):

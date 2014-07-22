@@ -1,0 +1,57 @@
+{% extends "bootstrap/base.html" %}
+{% block title %}Dnsmon - Dashboard{% endblock %}
+{% block styles %}
+{{super()}}
+<link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
+<link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+<link rel="stylesheet" href="{{ url_for("static", filename="style.css") }}">
+{% endblock %}
+{% block navbar %}
+<div class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+        <span class="sr-only">Toggle navigation</span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="/">DnsMon</a>
+    </div>
+    <div class="container">
+        <div class="navbar-collapse collapse">
+          <ul class="nav navbar-nav">
+            <li class="active"><a href="/dashboard">Dashboard</a></li>
+            <li><a href="{{ url_for('add_domains') }}">New</a></li>
+          </ul>
+        </div><!--/.nav-collapse -->
+    </div>
+</div>
+{% endblock %}
+{% block body_attribs %} role="document" {% endblock %}
+
+{% block content %}
+<div  class="container theme-showcase" role="main">
+    <!-- Main jumbotron for a primary marketing message or call to action -->
+      <div class="page-header">
+        <h1>Dashboard</h1>
+      </div>
+
+    <h2>Status updates last {{interval}}</h2>
+     <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Domain/IP</th>
+            <th>Previous</th>
+            <th>Checked</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for status in statuses %}
+        <tr>
+            <td>{{ status["domain_name"] }}</td>
+            <td>{{ status["prev_lookup"] }}</td>
+            <td>{{ status["lookup"] }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+     </table>
+</div>
+{% endblock %}
