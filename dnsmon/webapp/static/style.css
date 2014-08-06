@@ -17,10 +17,8 @@ body {
   width: auto;
 }
 
-/* Message flashing
-.flash {
-  background-color: #FBB0B0;
-  padding: 10px;
-  width: 400px;
+body .modal-dialog {
+    /* new custom width */
+    width: 750px;
+
 }
-*/
