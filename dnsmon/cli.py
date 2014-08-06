@@ -29,7 +29,7 @@ def main():
     _log.info("Cli invoked: %s", " ".join(sys.argv))
 
     if args.service == "monitor":
-        service.configure(num_threads=3, lookup_interval=datetime.timedelta(minutes=args.interval))
+        service.configure(num_threads=3, lookup_interval=datetime.timedelta(minutes=args.interval), db_host="localhost", db_port="27017", db_name="dnsmon")
         service.run()
     elif args.service == "webapp":
         webapp.configure(host="0.0.0.0", port="8000")

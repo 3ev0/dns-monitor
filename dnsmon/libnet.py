@@ -18,7 +18,7 @@ _config = {"tlds":[]}
 
 def configure(**kwargs):
     _config.update(kwargs)
-    _log.info("MOdule configured: %s", _config)
+    _log.debug("MOdule configured: %s", _config)
 
 def domain_part(name):
     if not len(_config["tlds"]):

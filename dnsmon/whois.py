@@ -42,33 +42,36 @@ def repr_records(whoisdata):
     return "\n".join(lines)
 
 
-def domain_lookup(domain, wserver=None):
+def domain_lookup(domain, wserver=None, raw=False):
     if not libnet.is_domain(domain):
         raise ValueError("%s is not a valid domain", domain)
 
     if len(domain.strip(".").split(".")) is 1:
         tld = domain.split(".")[-1]
-        whoisdata = _parse_whois_response(_talk_whois(_whois_root, "."+tld))
+        whoisdata = _talk_whois(_whois_root, "."+tld)
     else:
         if not wserver:
             wserver = _get_auth_wserver_domain(domain)
-        whoisdata = _parse_whois_response(_talk_whois(wserver, domain))
-    return whoisdata
+        whoisdata = _talk_whois(wserver, domain)
+    if raw:
+        return whoisdata
+    else:
+        return _parse_whois_response(whoisdata)
 
 
-def lookup(querystr, wserver=None):
+def lookup(querystr, wserver=None, raw=False):
     if libnet.is_domain(querystr):
-        return domain_lookup(querystr, wserver)
+        return domain_lookup(querystr, wserver, raw)
     elif libnet.is_ipaddr(querystr):
-        return ip_lookup(querystr, wserver)
+        return ip_lookup(querystr, wserver, raw)
     elif libnet.is_asnum(querystr):
-        return ip_lookup(querystr, wserver)
+        return ip_lookup(querystr, wserver, raw)
     else:
         raise ValueError(querystr, "Should be domain, ip or asnum")
     pass
 
 
-def ip_lookup(querystr, wserver=None):
+def ip_lookup(querystr, wserver=None, raw=False):
     if not libnet.is_ipaddr(querystr) and not libnet.is_asnum(querystr):
         raise ValueError("%s is not a valid IP-address or ASnum", querystr)
 
@@ -84,7 +87,10 @@ def ip_lookup(querystr, wserver=None):
         pass
     elif wserver == "whois.lacnic.net":  # no special query needed
         pass
-    return _parse_whois_response(_talk_whois(wserver, querystr))
+    if raw:
+        return _talk_whois(wserver, querystr)
+    else:
+        return _parse_whois_response(_talk_whois(wserver, querystr))
 
 
 def _parse_whois_response(response):

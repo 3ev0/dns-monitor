@@ -70,11 +70,18 @@ def status_info(id):
                 prev_status = statuses[idx+1]
             break
     if not prev_status:
-        whoisstr = "\n".join(supportlib.strdiff([], req_status["whois_state"].split("\n")))
-        dnsstr = "\n".join(supportlib.strdiff([], req_status["dns_state"].split("\n")))
+        whoisstr = req_status["whois_state"] if req_status["whois_state"] else "No whois info available"
+        dnsstr = req_status["dns_state"] if req_status["dns_state"] else "No DNS resolve available"
     else:
-        whoisstr = "\n".join(supportlib.strdiff(prev_status["whois_state"].split("\n"), req_status["whois_state"].split("\n")))
-        dnsstr = "\n".join(supportlib.strdiff(prev_status["dns_state"].split("\n"), req_status["dns_state"].split("\n")))
+        if not req_status["whois_state"]:
+            whoisstr = "No whois info available"
+        else:
+            whoisstr = "\n".join(supportlib.strdiff(prev_status["whois_state"].split("\n"), req_status["whois_state"].split("\n")))
+
+        if not req_status["dns_state"]:
+            dnsstr = "No DNS resolve available"
+        else:
+            dnsstr = "\n".join(supportlib.strdiff(prev_status["dns_state"].split("\n"), req_status["dns_state"].split("\n")))
 
     if flask.request.args.get("display", "") == "modal":
         return flask.render_template("status_info_modal.html", status=req_status, whois=whoisstr, dns=dnsstr)
