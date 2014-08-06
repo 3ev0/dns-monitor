@@ -10,12 +10,15 @@ from dnsmon import webapp
 
 _log = logging.getLogger()
 
+DEF_INTERVAL = 60*24
+
 def main():
     argparser = argparse.ArgumentParser(description="Control the dns-monitor services.")
     argparser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
 
     subparser = argparser.add_subparsers(dest="service", help="Choose a service to control")
     ls_parser = subparser.add_parser("monitor", help="The service that monitors the domains.")
+    ls_parser.add_argument("-i", "--interval", type=int, default=DEF_INTERVAL, help="The interval between lookups (in minutes). Default: {:d}".format(DEF_INTERVAL))
 
     webapp_parser = subparser.add_parser("webapp", help="The web application.")
 
@@ -26,7 +29,7 @@ def main():
     _log.info("Cli invoked: %s", " ".join(sys.argv))
 
     if args.service == "monitor":
-        service.configure(num_threads=3, lookup_interval=datetime.timedelta(hours=1))
+        service.configure(num_threads=3, lookup_interval=datetime.timedelta(minutes=args.interval))
         service.run()
     elif args.service == "webapp":
         webapp.configure(host="0.0.0.0", port="8000")

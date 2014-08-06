@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Dnsmon - Dashboard{% endblock %}
+{% import "bootstrap/wtf.html" as wtf %}
+{% block title %}Dnsmon - Search{% endblock %}
 {% block navbar %}
 <div class="navbar navbar-inverse navbar-fixed-top" role="navigation">
     <div class="navbar-header">
@@ -12,45 +13,36 @@
     <div class="container">
         <div class="navbar-collapse collapse">
           <ul class="nav navbar-nav">
-            <li class="active"><a href="/dashboard">Dashboard</a></li>
+            <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
             <li><a href="{{ url_for('add_domains') }}">New</a></li>
-             <li><a href="{{ url_for('search') }}">Search</a></li>
+            <li class="active"><a href="{{ url_for('search') }}">Search</a></li>
           </ul>
-        </div><!--/.nav-collapse -->
+        </div>
     </div>
 </div>
 {% endblock %}
 {% block content %}
-    <div class="container theme-showcase" role="main">
-      <div class="page-header">
-        <h1>Dashboard</h1>
-      </div>
+<div  class="container theme-showcase" role="main">
+    <div class="page-header">
+        <h1>Search</h1>
+    </div>
 
-    <h2>Status updates last {{interval | dtstring }}</h2>
-     <table class="table table-striped">
-        <thead>
-          <tr>
-            <th>Domain/IP</th>
-            <th>Observed</th>
-            <th>Previous Lookup</th>
-          </tr>
-        </thead>
-        <tbody>
-        {% for status in statuses %}
-        <tr>
-            <td><a href="{{ url_for('domain_info', name=status['domain_name']) }}">{{ status["domain_name"] }}</a></td>
-            <td>{{ status["lookup"] | dtstring }}</td>
-            <td>{{ status["prev_lookup"] | dtstring }}</td>
-        </tr>
-        {% endfor %}
-        </tbody>
-     </table>
-    <h2>Most recently added</h2>
-    <table class="table table-striped">
+    <div>
+        {{ wtf.quick_form(form) }}
+    </div>
+
+    {% if domains is defined and domains is not none  %}
+    <div class="page-header">
+        <h1>Domains</h1>
+    </div>
+        {% if domains.count() > 0 %}
+    <div>
+        <table class="table table-striped">
         <thead>
           <tr>
             <th>Domain/IP</th>
             <th>Added</th>
+            <th>Tags</th>
           </tr>
         </thead>
         <tbody>
@@ -58,9 +50,20 @@
         <tr>
             <td><a href="{{ url_for('domain_info', name=domain['name']) }}">{{ domain["name"] }}</a></td>
             <td>{{ domain["added"] | dtstring }}</td>
+            <td>{% for tag in domain["tags"] %}
+                <span class="label label-info">{{ tag }}</span>
+                {% endfor %}
+            </td>
         </tr>
         {% endfor %}
         </tbody>
     </table>
+
+    </div>
+        {% else %}
+        <p> Nothing found by this criteria :(</p>
+        {% endif %}
+    {% endif %}
+
 </div>
 {% endblock %}

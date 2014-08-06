@@ -6,10 +6,9 @@ import logging
 import datetime
 import time
 import re
+import traceback
 
-from dns import query
-from dns import message
-from dns import reversename
+from dns import query, message, reversename, rdatatype
 import requests
 
 from dnsmon import mongostore
@@ -21,7 +20,8 @@ _log = logging.getLogger(__name__)
 _threads = []
 _config = {"num_threads": 5,
            "lookup_interval": datetime.timedelta(days=1),
-           "nameserver": "8.8.8.8"
+           "nameserver": "8.8.8.8",
+           "dns_rr_types": ["NS", "A", "AAAA", "TXT", "SOA", "CNAME", "PTR", "MX"]
         }
 
 def configure(**kwargs):
@@ -89,24 +89,27 @@ def thread_main():
             if not cur_statuses.count():
                 _log.info("No previous statuses for domain %s. Storing new status", domainspec["name"])
                 statusid = mongostore.add_status(statusspec, domainspec)
-            elif not compare_statuses(statusspec, cur_statuses[0]):
-                 _log.debug("Status is unchanged. Not storing this status")
+            elif compare_statuses(statusspec, cur_statuses[0]):
+                 _log.info("Status is unchanged for domain %s. Not storing this status", domainspec["name"])
             else:
-                _log.info("Status changed. Storing new status")
+                _log.info("Status changed for domain %s. Storing new status", domainspec["name"])
                 statusid = mongostore.add_status(statusspec, domainspec)
             mongostore.save_domain(domainspec)
             _log.debug("Job finished")
 
         except Exception as ex:
-            _log.error("%s crashed: %s", threading.current_thread().name, ex)
+            _log.error("Error occured processing %s: %s", domainspec, ex)
+            _log.debug(traceback.format_exc())
         finally:
             _domain_queue.task_done()
     pass
 
 def compare_statuses(status1, status2):
-    if status1["dns_state"] is not status2["dns_state"]:
+    if status1["dns_state"] != status2["dns_state"]:
+        _log.debug("Dns state differs")
         return False
-    elif status1["whois_state"] is not status2["whois_state"]:
+    elif status1["whois_state"] != status2["whois_state"]:
+        _log.debug("Whois state differs")
         return False
     else:
         return True
@@ -119,30 +122,25 @@ def process_domainspec(domainspec):
 
 
 def whois_lookup(name):
-    _log.info("WHOIS lookup for %s", name)
+    _log.debug("WHOIS lookup for %s", name)
     if libnet.is_domain(name):
         name = libnet.domain_part(name)
-    try:
-        result = whois.lookup(name)
-    except Exception as ex:
-        _log.error("Whois lookup error: %s", ex)
-        result = "Lookup error: {}".format(str(ex))
-    else:
-        _log.info("WHOIS lookup successful")
+    result = whois.repr_records(whois.lookup(name))
     return result
 
 
 def resolve_name(name):
-    _log.info("DNS resolve for %s", name)
+    _log.debug("DNS resolve for %s", name)
     if libnet.is_ipaddr(name):
         name = reversename.from_address(name)
-    try:
-        msg = message.make_query(name, "ANY")
-        resp = query.udp(msg, _config["nameserver"])
-        result = [str(rr) for rr in resp.answer]
-    except Exception as ex:
-        _log.error("Dns resolve error: %s", ex)
-        result = "Dns resolve error: {}".format(str(ex))
-    else:
-        _log.info("DNS resolve successful")
+    msg = message.make_query(name, "ANY")
+    resp = query.tcp(msg, _config["nameserver"])
+    dnslines = []
+    for rr in resp.answer:
+        rrtype = rdatatype.to_text(rr.rdtype)
+        if rrtype in _config["dns_rr_types"]:
+            if rrtype != "TXT":
+                dnslines += ["{} {} {}".format(name, rrtype, str(r) if rrtype != "TXT" else str(r).tolower()) for r in rr]
+    dnslines.sort()
+    result = "\n".join(dnslines)
     return result

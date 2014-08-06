@@ -29,6 +29,7 @@ import logging
 
 import pymongo
 from pymongo import MongoClient
+from bson import objectid
 
 __author__ = 'ivo'
 _db_version = "0.1"
@@ -43,7 +44,7 @@ config = {"host": "localhost",
 _log = None
 
 
-class DomainExistsException(BaseException):
+class DomainExistsException(Exception):
     pass
 
 
@@ -80,7 +81,7 @@ def init_database():
     return True
 
 
-def domains(domainspec=None, min_age=None, num=None):
+def domains(domainspec=None, min_age=None):
     """
     Get domains from mongodb. If min_age is provided, the domains for which a status check has not
      been performed at least min_age time ago.
@@ -89,14 +90,13 @@ def domains(domainspec=None, min_age=None, num=None):
     :return:list of domains
     """
     domaincol = config["client"][config["db"]][DOMAINCOL]
-    rlimit = 0 if num is None else num
     if domainspec is not None:
         curs = domaincol.find(domainspec)
     elif min_age is not None:
         last_lookup = datetime.datetime.now() - min_age
-        curs = domaincol.find({"$or": [{"last_lookup": {"$lt": last_lookup}}, {"last_lookup": None}]}, limit=rlimit).sort("last_lookup")
+        curs = domaincol.find({"$or": [{"last_lookup": {"$lt": last_lookup}}, {"last_lookup": None}]}).sort("last_lookup")
     else:
-        curs = domaincol.find(limit=rlimit).sort("last_lookup")
+        curs = domaincol.find().sort("last_lookup")
     return curs
 
 
@@ -130,12 +130,34 @@ def del_domain(domain):
     :param domain: dict of the domain
     :return:
     """
-    _check_format(domain)
+    if type(domain) is str:
+        domain = objectid.ObjectId(domain)
+    elif type(domain) is dict:
+        pass
+    else:
+        raise ValueError("Parameter type {} is not allowed".format(type(domain)))
+
     domaincol = config["client"][config["db"]][DOMAINCOL]
     res = domaincol.remove(domain)
     _log.info("Domain %r removed from db: %r.", domain, res)
     return res
 
+def del_statuses(status):
+    """
+    :param status:
+    :return:
+    """
+    if type(status) is str:
+        status = objectid.ObjectId(status)
+    elif type(status) is dict:
+        pass
+    else:
+        raise ValueError("Parameter type {} is not allowed".format(type(domain)))
+
+    statuscol = config["client"][config["db"]][STATUSCOL]
+    res = statuscol.remove(status)
+    _log.info("%d Statuses removed from db", res["n"])
+    return res
 
 def add_status(status, domain):
     """
@@ -143,13 +165,15 @@ def add_status(status, domain):
     :param domain: The domain to update
     :return:the id of the status document
     """
+    _log.debug("Adding status %r", status)
     _check_format(status)
     _check_format(domain)
     statuscol = config["client"][config["db"]][STATUSCOL]
     status["dbver"] = _db_version
     status["domain_id"] = domain["_id"]
+    if "prev_lookup" not in status:
+        status["prev_lookup"] = None
     statusid = statuscol.insert(status)
-    _log.debug("Added status %r with id %s", status, str(statusid))
     return statusid
 
 def domain_statuses(domain):
@@ -158,13 +182,17 @@ def domain_statuses(domain):
     curs = statuscol.find({"domain_id": domain["_id"]}, sort=[("lookup", pymongo.DESCENDING)])
     return curs
 
-def statuses(max_age=None):
+def statuses(statusspec=None, max_age=None):
     statuscol = config["client"][config["db"]][STATUSCOL]
+    if statusspec is not None:
+        status = statusspec
+    else:
+        status = {}
     if max_age is not None:
         since = datetime.datetime.now() - max_age
-        curs = statuscol.find({"lookup": {"$gt": since}}, sort=[("lookup", pymongo.DESCENDING)])
-    else:
-        curs = statuscol.find(sort=[("lookup", pymongo.DESCENDING)])
+        status.update({"lookup": {"$gt": since}})
+
+    curs = statuscol.find(status, sort=[("lookup", pymongo.DESCENDING)])
     return curs
 
 def _check_format(the_arg):

@@ -1,25 +1,90 @@
-{% extends "bootstrap/base.html" %}
-{% block title %}Dnsmon - {{ domain["name"] }}{% endblock %}
-
+{% extends "base.html" %}
+{% block title %}Dnsmon - Domain Info{% endblock %}
 {% block navbar %}
 <div class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+        <span class="sr-only">Toggle navigation</span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="/">DnsMon</a>
+    </div>
     <div class="container">
         <div class="navbar-collapse collapse">
           <ul class="nav navbar-nav">
             <li><a href="/dashboard">Dashboard</a></li>
+            <li><a href="{{ url_for('add_domains') }}">New</a></li>
+            <li><a href="{{ url_for('search') }}">Search</a></li>
           </ul>
         </div><!--/.nav-collapse -->
     </div>
 </div>
 {% endblock %}
-
 {% block content %}
-    <div class="jumbotron">
-        <h1>{{ domain["name"] }}</h1>
-        <p>Added: {{ domain["added"] }} </p>
-        <p>Last lookup: {{ domain["last_lookup"] }}</p>
-    </div>
-    {% for stat in statuses %}
+    <div class="modal fade" id="statusModal" tabindex="-1" role="dialog" aria-labelledby="statusModalLabel" aria-hidden="true"></div>
+    <div class="container theme-showcase" role="main">
+        <div class="jumbotron">
+            <h1>{{ domain["name"] }} <small></small></h1>
+            <div class="row">
+                <div class="col-md-6">
+                    <p>Added {{ domain["added"]| dtstring }} </p>
+                </div>
+                <div class="col-md-6">
+                    <span class="pull-right"><a href="{{ url_for('del_domain', id=domain['_id']|string) }}" class="btn btn-primary btn-lg" role="button">Delete</a></span>
+                </div>
+            </div>
+        </div>
 
-    {% endfor %}
+        <div class="row">
+            <div class="col-md-6">
+            <h3>
+                {% for tag in domain["tags"] %}
+                <span class="label label-info">{{ tag }}</span>
+                {% endfor %}
+            </h3>
+            </div>
+            <div class="col-md-6">
+                <blockquote><pre>{{ domain["description"]|safe }}</pre></blockquote>
+            </div>
+        </div>
+
+        <h1>Status Mutations</h1>
+        {% if domain["last_lookup"] %}
+            <p>Last lookup was at {{ domain["last_lookup"] | dtstring }}</p>
+            <div>
+            <table class="table table-striped">
+                <thead><tr><th>#</th><th>Observed</th><th>Previous Lookup</th></tr></thead>
+                <tbody>
+                {% for stat in statuses %}
+                    <tr><td>{{ statuses.index(stat)+1 }}</td>
+                        <td><a href="{{ url_for('status_info', id=stat['_id']|string) }}?display=modal" data-toggle="statusModal">{{ stat["lookup"] | dtstring }}</a></td>
+                        <td>{{ stat["prev_lookup"] | dtstring }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        {% else %}
+            <p>No lookup performed yet</p>
+        {% endif %}
+
+
+        </div>
+    </div>
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+<script type="text/javascript">
+    $(document).ready(function() {
+        $('[data-toggle="statusModal"]').click(function(e) {
+            console.log("here")
+            e.preventDefault();
+            var url = $(this).attr('href');
+            $.get(url, function(data) {
+                $("#statusModal").html(data);
+                $("#statusModal").modal();
+            });
+        });
+    });
+</script>
 {% endblock %}

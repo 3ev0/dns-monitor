@@ -34,8 +34,8 @@ def configure(**kwargs):
 def repr_records(whoisdata):
     lines = []
     for record in whoisdata:
-        for k, v in record.items():
-            values = v.split("\n")
+        for k in sorted(record):
+            values = record[k].split("\n")
             for val in values:
                 lines.append("{}:   {}".format(k, val))
         lines.append("")
@@ -97,7 +97,7 @@ def _parse_whois_response(response):
     :param response: the raw response to parse
     :return:a list of records containg (key, value) tuples
     """
-    newkvre = re.compile("^(\s*)([^\>\%\s][^:]+):(\s+(.*))?$")
+    newkvre = re.compile("^(\s*)([^\>\%\s][^:]+):(\s*(.*))?$")
     commre = re.compile("^\s*[\%\>\@\;].*$")
     records = []
     currecord, curkey = {}, None

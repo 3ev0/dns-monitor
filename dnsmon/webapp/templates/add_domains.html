@@ -1,12 +1,6 @@
-{% extends "bootstrap/base.html" %}
+{% extends "base.html" %}
 {% import "bootstrap/wtf.html" as wtf %}
 {% block title %}Dnsmon - Add Domain{% endblock %}
-{% block styles %}
-{{super()}}
-<link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
-<link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
-<link rel="stylesheet" href="{{ url_for("static", filename="style.css") }}">
-{% endblock %}
 {% block navbar %}
 <div class="navbar navbar-inverse navbar-fixed-top" role="navigation">
     <div class="navbar-header">
@@ -19,26 +13,13 @@
     <div class="container">
         <div class="navbar-collapse collapse">
           <ul class="nav navbar-nav">
-            <li><a href="/dashboard">Dashboard</a></li>
+            <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
             <li class="active"><a href="{{ url_for('add_domains') }}">New</a></li>
+            <li><a href="{{ url_for('search') }}">Search</a></li>
           </ul>
         </div><!--/.nav-collapse -->
     </div>
 </div>
-{% endblock %}
-{% block body_attribs %} role="document" {% endblock %}
-{% block body %}
-    <div>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-         {% for category, message in messages %}
-          <div class="alert {{ category }}" role="alert">{{ message }}</div>
-        {% endfor %}
-        {% endif %}
-        {% endwith %}
-    </div>
-{{super()}}
-
 {% endblock %}
 {% block content %}
 <div  class="container theme-showcase" role="main">
